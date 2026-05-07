@@ -1,6 +1,10 @@
-# Procedural 3D Scene Dataset Generator
+# [Supplementary PDF](SI_VLM_Counting.pdf)
+### This is the official implementation of ***Assessing the Visual Enumeration Abilities of Specialized Counting Architectures and Vision-Language Models*** paper accepted for ICPR 2026.
 
-This repository contains a multiprocessing pipeline to programmatically generate 3D synthetic datasets using Python and Blender. It automatically places random shapes, ensures they don't overlap, generates lighting, exports metadata (JSON), creates instance segmentation masks (.npz), and renders the final scene using Blender's Cycles engine.
+
+## Procedural 3D Scene Dataset Generator
+
+The scripts contain a multiprocessing pipeline to programmatically generate 3D synthetic datasets using Python and Blender. It automatically places random shapes, ensures they don't overlap, generates lighting, exports metadata (JSON), creates instance segmentation masks (.npz), and renders the final scene using Blender's Cycles engine.
 
 ## Prerequisites
 
