@@ -1,62 +1,111 @@
 # [Supplementary PDF](SI_VLM_Counting.pdf)
-### This is the official implementation of ***Assessing the Visual Enumeration Abilities of Specialized Counting Architectures and Vision-Language Models*** paper accepted for ICPR 2026.
 
+### Official implementation of ***Assessing the Visual Enumeration Abilities of Specialized Counting Architectures and Vision-Language Models*** (ICPR 2026)
 
-## Procedural 3D Scene Dataset Generator
+---
 
-The scripts contain a multiprocessing pipeline to programmatically generate 3D synthetic datasets using Python and Blender. It automatically places random shapes, ensures they don't overlap, generates lighting, exports metadata (JSON), creates instance segmentation masks (.npz), and renders the final scene using Blender's Cycles engine.
+## Reproducing the Analysis
 
-## Prerequisites
+The `data/` folder contains pre-computed model responses that allow you to reproduce all analysis plots without running the models.
 
-*   **Blender 4.0+**: Ensure the Blender binary is accessible in your system `PATH`, or update the `BLENDER_BIN` variable in the launcher script.
-*   **Python 3.8+**: Handles the multiprocessing and configuration generation.
-*   **Required Python Packages**: 
+### Environment Setup
+
+```bash
+conda activate base
+pip install matplotlib seaborn pandas scipy scikit-learn pydantic
+```
+
+Or create a dedicated environment:
+
+```bash
+conda create -n vlm_count python=3.10
+conda activate vlm_count
+pip install matplotlib seaborn pandas scipy scikit-learn pydantic
+```
+
+### Generate Plots
+
+```bash
+python plots.py              # Generate all 3 plots
+python plots.py --list       # List available plots
+python plots.py --plot 1     # Generate specific plot
+python plots.py --plot 1 2   # Generate multiple plots
+python plots.py --no-stats   # Suppress statistical analysis output
+```
+
+**Output** (saved to `plots/` folder):
+
+| Plot | File | Description |
+|------|------|-------------|
+| 1 | `Combined_Effects_Analysis.pdf` | Background, shape, and color effects on counting accuracy/MAE |
+| 2 | `confusion_matrices.pdf` | Prediction vs Truth heatmaps across datasets and model types |
+| 3 | `accuracy_by_prompt_method.pdf` | VLM accuracy comparison across prompt strategies |
+
+### Data Contents
+
+| File | Size | Description |
+|------|------|-------------|
+| `data/annotation_FSC147_384_n_40.json` | 14MB | FSC-147 annotations (filtered to n<=40) |
+| `data/FSCD_n40.json` | 0.9MB | FSCD-LVIS annotations (filtered to n<=40) |
+| `data/results/*.pkl` | 95MB | Pre-computed responses from 7 models |
+
+**Models included:** Claude, Gemini, GPT, Qwen, PseCo, T2ICount, TFOC
+
+---
+
+## Generating Raw Data
+
+If you want to generate the full dataset from scratch (rather than using the pre-computed results), follow the steps below.
+
+### Prerequisites
+
+- **Blender 4.0+**: Ensure the Blender binary is accessible in your system `PATH`, or update the `BLENDER_BIN` variable in `generate_dataset.py`.
+- **Python 3.8+**
+- **Required packages**:
     ```bash
     pip install tqdm numpy
     ```
-    *(Note: Ensure Blender's internal Python environment also has `numpy` installed, which is usually the default).*
 
-## File Structure
+### Dataset Generation
 
-*   `generate_dataset.py`: The Python launcher script. It creates JSON configuration files (specifying shape counts, random seeds, object sizes, and colors) and spawns parallel headless Blender processes.
-*   `blender_scene_generator.py`: The background worker script. Blender executes this script to read the JSON configuration, build the scene, calculate collisions, extract masks, and render the final image.
-
----
-
-## Usage Instructions
-
-1.  **Configure Paths:** Open `generate_dataset.py` and verify your paths at the top of the file under the `=== CONFIGURATION & PATHS ===` header.
-    *   Make sure `BLENDER_BIN` is pointing to your Blender executable (e.g., `"blender"` or `"/path/to/blender"`).
-    *   Adjust `MAX_WORKERS` based on your hardware capabilities. **Warning:** Rendering in Blender is highly intensive; setting this too high will run out of VRAM or crash your system.
-2.  **Run the Generator:**
+1. **Configure paths** in `generate_dataset.py` under the `=== CONFIGURATION & PATHS ===` header.
+2. **Run the generator:**
     ```bash
     python generate_dataset.py
     ```
-3.  **Check Outputs:** Rendered images, JSON configurations, and segmentation masks will be populated in the `./output_dataset` directory.
+3. **Check outputs:** Rendered images, JSON configs, and segmentation masks will be in `./output_dataset`.
+
+### Running Models
+
+After generating the dataset, you need to:
+
+1. Run each VLM (Claude, Gemini, GPT, Qwen) with the three prompt strategies (estimate, label, locate)
+2. Run counting models (PseCo, T2ICount, TFOC) 
+3. Save results as pickle files in `data/results/`
+
+The pickle files should follow the naming convention:
+- `{model}_result_{method}_{dataset}.pkl` for VLMs
+- `{model}_{dataset}.pkl` for counting models
 
 ---
 
-## Customizing the Scene
+## Customizing the Scene Generator
 
-### 1. Manipulating Shapes and Sizes
-To change which shapes spawn, open `generate_dataset.py` and modify the `shapes` list:
+### Shapes and Sizes
+
+Modify the `shapes` list in `generate_dataset.py`:
 ```python
 shapes = ["cube", "uv_sphere", "cylinder", "cone", "torus", "capsule", "ellipsoid", "pyramid"]
 ```
 
-To modify the size of the shapes, adjust the `size` variable in `generate_dataset.py`. It is currently set to a fixed fraction (`0.10`). To allow dynamic, randomized sizing, uncomment the uniform distribution line:
+For randomized sizing, uncomment:
 ```python
-# Fixed size
-size = 0.10 
-
-# Randomized size (uncomment this for variety)
 # size = rng.uniform(min_size_fraction, max_size_fraction)
 ```
 
-*(Note: To add entirely new shapes, you must add a new condition block to the `add_shape_primitive(shape_type, location)` function in `blender_scene_generator.py` utilizing the `bpy.ops.mesh.primitive_*` API).*
+### Colors
 
-### 2. Manipulating Colors
-Colors are generated in `generate_dataset.py` using a mix of pure random RGB and randomized HSV values. Look for the color generation block inside the target count loop:
+Colors are generated using random RGB or HSV values in `generate_dataset.py`:
 ```python
 if rng.random() < 0.5:
     r, g, b = rng.random(), rng.random(), rng.random()
@@ -66,16 +115,15 @@ else:
     v = rng.uniform(0.3, 1.0)
     r, g, b = colorsys.hsv_to_rgb(h, s, v)
 ```
-You can change this to lock to specific color palettes (e.g., pastels, primary colors) by limiting the `rng.uniform` bounds or passing a hardcoded list of `[r, g, b, a]` values.
 
-### 3. Manipulating the Background and Floor
-The environment materials are built using node trees inside the `setup_background_and_trapezoid()` function in `blender_scene_generator.py`.
+### Background and Floor
 
-* **Floor Material:** The floor currently uses a checkerboard generated by a `ShaderNodeTexChecker`. You can change the scale or the two colors of the grid:
-    ```python
-    checker.inputs["Scale"].default_value = 18.0
-    col_a.outputs[0].default_value = (0.02, 0.02, 0.02, 1.0)  # Dark gray
-    col_b.outputs[0].default_value = (0.06, 0.06, 0.06, 1.0)  # Lighter gray
-    
+Modify materials in `setup_background_and_trapezoid()` in `blender_scene_generator.py`:
 
-***Background Wall Material:** The background operates on the same logic (look for the block defining `mat_bg`). To replace the checkerboard with a solid color, remove the checkerboard nodes and connect a standard `ShaderNodeRGB` directly into the `Principled BSDF` Base Color input.
+```python
+checker.inputs["Scale"].default_value = 18.0
+col_a.outputs[0].default_value = (0.02, 0.02, 0.02, 1.0)  # Dark gray
+col_b.outputs[0].default_value = (0.06, 0.06, 0.06, 1.0)  # Lighter gray
+```
+
+To use a solid color instead of checkerboard, connect a `ShaderNodeRGB` directly to the `Principled BSDF` Base Color input.
